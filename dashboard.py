@@ -10,6 +10,9 @@ from plotly.subplots import make_subplots
 import joblib
 import os
 from datetime import datetime
+import contextlib
+import io
+import auto_pipeline
 
 # ─────────────────────────────────────────
 # PAGE CONFIG
@@ -240,6 +243,30 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Map Style**")
     map_type = st.radio("View", ["Heatmap", "Markers"], index=0)
+
+    st.markdown("---")
+    st.markdown("### 🔄 Model Maintenance")
+    if st.button("Retrain Model & Fetch API", use_container_width=True, type="primary"):
+        with st.status("🚀 Running Auto Pipeline...", expanded=True) as status:
+            st.write("Initializing incremental fetch and retraining...")
+            
+            # Capture stdout to show logs in dashboard
+            f = io.StringIO()
+            with contextlib.redirect_stdout(f):
+                try:
+                    auto_pipeline.main()
+                    logs = f.getvalue()
+                    st.text_area("Pipeline Logs", value=logs, height=300)
+                except Exception as e:
+                    st.error(f"Pipeline failed: {e}")
+            
+            # Clear cache so new data is loaded
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            
+            status.update(label="✅ Pipeline Complete! Data refreshed.", state="complete", expanded=False)
+            st.toast("Model retrained and data updated!")
+            st.rerun()
 
     st.markdown("---")
     st.markdown(f"<small style='color:#64748b'>Model: Random Forest<br>Last run: {datetime.now().strftime('%Y-%m-%d %H:%M')}<br>Grid cells: {len(df):,}</small>", unsafe_allow_html=True)
@@ -490,3 +517,9 @@ with st.expander("📋 View Raw Risk Scores Table"):
     )
     csv = df[show_cols].to_csv(index=False).encode("utf-8")
     st.download_button("⬇️ Download Risk Scores CSV", csv, "Dataset/Export/risk_scores_export.csv", "text/csv")
+
+with st.expander("📈 View Model Training & Evaluation Report"):
+    if os.path.exists("model_evaluation.png"):
+        st.image("model_evaluation.png", caption="Last Calibration: ROC, PR Curves and Feature Importance", use_container_width=True)
+    else:
+        st.info("Evaluation report image not found. Run 'Retrain Model' to generate it.")
