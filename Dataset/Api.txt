@@ -1,0 +1,6 @@
+
+1. 311_requests
+url = "https://gis.montgomeryal.gov/server/rest/services/HostedDatasets/Received_311_Service_Request/MapServer/0/query"
+
+2. code_violations
+url = "https://gis.montgomeryal.gov/server/rest/services/HostedDatasets/Code_Violations/MapServer/0/query"
