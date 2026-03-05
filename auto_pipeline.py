@@ -787,6 +787,22 @@ def step4_feature_matrix():
         if fm[col].isnull().sum() > 0:
             fm[col] = fm[col].fillna(fm[col].median())
 
+    # ── 8b. Merge 311 sentiment (complaint intensity) into feature matrix ──
+    log("\nMerging 311 sentiment (complaint intensity) per grid cell...")
+    try:
+        import sentiment_311
+        sentiment_agg = sentiment_311.main()
+        fm = fm.merge(sentiment_agg, on="grid_cell", how="left")
+        fm["sentiment_mean"] = fm["sentiment_mean"].fillna(0)
+        fm["sentiment_count"] = fm["sentiment_count"].fillna(0).astype(int)
+        fm["sentiment_std"] = fm["sentiment_std"].fillna(0)
+        log(f"  Sentiment merged: {fm['sentiment_mean'].gt(0).sum()} cells with 311 sentiment")
+    except Exception as e:
+        log(f"  ⚠ Sentiment merge skipped: {e}")
+        fm["sentiment_mean"] = 0.0
+        fm["sentiment_count"] = 0
+        fm["sentiment_std"] = 0.0
+
     log(f"\n  Final feature matrix shape: {fm.shape}")
 
     # ── 9. Summary ────────────────────────────────────────────
@@ -985,9 +1001,14 @@ def step5_train_and_score():
     dashboard_cols = ["grid_cell", "cell_lat", "cell_lon",
                       "risk_score", "risk_label", "risk_flag",
                       "target_nuisance_binary"]
+    # optional_cols  = ["total_complaints", "total_nuisance", "open_violations",
+    #                   "dist_to_nearest_siren_km", "siren_coverage_gap",
+    #                   "nuisance_rate", "open_violation_rate", "chronic_parcel_rate"]
     optional_cols  = ["total_complaints", "total_nuisance", "open_violations",
                       "dist_to_nearest_siren_km", "siren_coverage_gap",
-                      "nuisance_rate", "open_violation_rate", "chronic_parcel_rate"]
+                      "nuisance_rate", "open_violation_rate", "chronic_parcel_rate",
+                      "sentiment_mean", "sentiment_count", "sentiment_std"]
+                      
     keep = [c for c in dashboard_cols + optional_cols if c in df.columns]
     df[keep].to_csv(os.path.join(DATASET_DIR, "risk_scores.csv"), index=False)
     log("  Saved -> risk_scores.csv")

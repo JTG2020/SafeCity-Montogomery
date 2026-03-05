@@ -390,7 +390,8 @@ low_count    = (df["adjusted_label"] == "Low").sum()
 alert_count  = df["alert"].sum()
 total_cells  = len(df)
 
-c1, c2, c3, c4, c5 = st.columns(5)
+# c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 with c1:
     st.markdown(f'<div class="metric-card"><div class="metric-value metric-red">{high_count}</div><div class="metric-label">High Risk Zones</div></div>', unsafe_allow_html=True)
 with c2:
@@ -399,9 +400,25 @@ with c3:
     st.markdown(f'<div class="metric-card"><div class="metric-value metric-green">{low_count}</div><div class="metric-label">Low Risk Zones</div></div>', unsafe_allow_html=True)
 with c4:
     st.markdown(f'<div class="metric-card"><div class="metric-value metric-blue">{alert_count}</div><div class="metric-label">Dispatch Alerts</div></div>', unsafe_allow_html=True)
+# with c5:
+#     avg_risk = df["adjusted_score"].mean()
+#     st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#a78bfa">{avg_risk:.2f}</div><div class="metric-label">Avg Risk Score</div></div>', unsafe_allow_html=True)
+
+# st.markdown("<br>", unsafe_allow_html=True)
 with c5:
     avg_risk = df["adjusted_score"].mean()
     st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#a78bfa">{avg_risk:.2f}</div><div class="metric-label">Avg Risk Score</div></div>', unsafe_allow_html=True)
+with c6:
+    avg_sent = df["sentiment_mean"].mean() if "sentiment_mean" in df.columns else 0.0
+    cells_with_311 = (df["sentiment_count"] > 0).sum() if "sentiment_count" in df.columns else 0
+    st.markdown(
+        f'<div class="metric-card">'
+        f'<div class="metric-value" style="color:#eab308">{avg_sent:.2f}</div>'
+        f'<div class="metric-label">Complaint intensity (311)</div>'
+        f'<div style="font-size:0.65rem;color:var(--text-muted);margin-top:0.2rem">{cells_with_311:,} cells w/ 311 data</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -469,10 +486,19 @@ with map_col:
                 color=color_map.get(str(row["adjusted_label"]), "gray"),
                 fill=True,
                 fill_opacity=0.7,
+                # popup=folium.Popup(
+                #     f"<b>Risk: {row['adjusted_label']}</b><br>"
+                #     f"Score: {row['adjusted_score']:.3f}<br>"
+                #     f"Cell: {row['grid_cell']}",
+                #     max_width=200
+                # )
                 popup=folium.Popup(
-                    f"<b>Risk: {row['adjusted_label']}</b><br>"
-                    f"Score: {row['adjusted_score']:.3f}<br>"
-                    f"Cell: {row['grid_cell']}",
+                    "<br>".join([
+                        f"<b>Risk: {row['adjusted_label']}</b>",
+                        f"Score: {row['adjusted_score']:.3f}",
+                        f"Cell: {row['grid_cell']}",
+                        *([f"Complaint intensity: {row['sentiment_mean']:.2f} (n={int(row['sentiment_count'])})"] if "sentiment_mean" in row.index and row.get("sentiment_count", 0) > 0 else []),
+                    ]),
                     max_width=200
                 )
             ).add_to(m)
@@ -603,7 +629,8 @@ with b3:
 # DATA TABLE
 # ─────────────────────────────────────────
 with st.expander("📋 View Raw Risk Scores Table"):
-    show_cols = ["grid_cell", "cell_lat", "cell_lon", "risk_score", "adjusted_score", "adjusted_label", "alert"]
+    #show_cols = ["grid_cell", "cell_lat", "cell_lon", "risk_score", "adjusted_score", "adjusted_label", "alert"]
+    show_cols = ["grid_cell", "cell_lat", "cell_lon", "risk_score", "adjusted_score", "adjusted_label", "alert", "sentiment_mean", "sentiment_count"]
     show_cols = [c for c in show_cols if c in df.columns]
     st.dataframe(
         df[show_cols].sort_values("adjusted_score", ascending=False),
