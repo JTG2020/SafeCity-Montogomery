@@ -111,6 +111,63 @@ def _condition_to_multiplier(condition: str) -> float:
             return mult
     return 1.0
 
+## Removing junk information from the weather.com page
+
+def _is_junk_alert(text: str) -> bool:
+    """True if this looks like promotional/video content, not an actual weather alert."""
+    if not text or len(text) < 3:
+        return True
+    t = text.lower()
+    # Promotional / video / educational content from weather.com. Update this list as needed.
+    junk_phrases = [
+        "video player",
+        "stay safe",
+        "could save your life",
+        "save your life",
+        "knowing the different",
+        "1:14",  # video duration
+    ]
+    if any(junk in t for junk in junk_phrases):
+        return True
+    # Run-on concatenated text (no spaces, or way too long)
+    if len(text) > 120:
+        return True
+    return False
+
+
+def _filter_alerts(alerts: list) -> list:
+    """Keep only alerts that look like real NWS-style weather alerts."""
+    seen = set()
+    out = []
+    for a in alerts:
+        a_clean = a.strip()
+        if not a_clean or _is_junk_alert(a_clean):
+            continue
+        # Dedupe by normalized text
+        key = re.sub(r"\s+", " ", a_clean.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(a_clean)
+    return out
+
+# Weather.com often puts the condition in the <title>, e.g.
+# "Montgomery, AL Weather - Partly Cloudy | Weather.com"
+def _condition_from_title(soup: BeautifulSoup) -> str | None:
+    """Try to get condition phrase from page title (e.g. '... - Partly Cloudy | Weather.com')."""
+    title_el = soup.find("title")
+    if not title_el:
+        return None
+    title = title_el.get_text(strip=True)
+    # Pattern: " - Partly Cloudy " or " - Cloudy |" or "Weather - Sunny"
+    m = re.search(r"[-|]\s*([A-Za-z\s/]+?)\s*[-|]", title)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"Weather\s*[-:]\s*([A-Za-z\s/]+?)(?:\s*[-|]|$)", title, re.I)
+    if m:
+        return m.group(1).strip()
+    return None
+
 
 def _parse_weather_html(html: str) -> dict:
     """
@@ -132,6 +189,24 @@ def _parse_weather_html(html: str) -> dict:
     phrase_el = soup.find(attrs={"data-testid": "wxPhrase"})
     if phrase_el:
         result["condition"] = phrase_el.get_text(strip=True)
+
+       # --- Current condition phrase ---
+    # weather.com uses data-testid; when page is static/JS not run, wxPhrase may be missing
+    # phrase_el = soup.find(attrs={"data-testid": "wxPhrase"})
+    # if phrase_el:
+    #     result["condition"] = phrase_el.get_text(strip=True)
+    # if result["condition"] == "Unknown":
+    #     # Fallback: condition often in page title (e.g. "... - Partly Cloudy | Weather.com")
+    #     from_title = _condition_from_title(soup)
+    #     if from_title and len(from_title) < 50:
+    #         result["condition"] = from_title
+    # if result["condition"] == "Unknown":
+    #     # Fallback: any element with data-testid containing "Phrase" or class with "phrase"
+    #     for el in soup.find_all(attrs={"data-testid": re.compile(r"phrase", re.I)}):
+    #         t = el.get_text(strip=True)
+    #         if t and 2 < len(t) < 50 and t != "Unknown":
+    #             result["condition"] = t
+    #             break
 
     # --- Temperature ---
     temp_el = soup.find(attrs={"data-testid": "TemperatureValue"})
@@ -169,6 +244,8 @@ def _parse_weather_html(html: str) -> dict:
                 if alert_text not in result["alerts"]:
                     result["alerts"].append(alert_text)
                 break
+    # Drop promotional/video/educational junk (e.g. "Stay Safe...", "Video Player1:14")
+    result["alerts"] = _filter_alerts(result["alerts"])
 
     return result
 
